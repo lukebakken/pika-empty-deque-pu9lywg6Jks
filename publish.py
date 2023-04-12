@@ -1,22 +1,34 @@
 import logging
 import pika
 
-LOG = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 
 class RabbitMQ:
-    def __init__(self, host, port):
+    def __init__(self, host, port, user, password):
+        self.credentials = pika.PlainCredentials(user, password)
         self.connection = None
         self.channel = None
         self.host = host
         self.port = port
 
+    def close(self):
+        if self.channel is not None:
+            self.channel.close()
+        if self.connection is not None:
+            self.connection.close()
+
     def create_connection(self):
         # Establish a connection to RabbitMQ
-        usr_pwd = pika.PlainCredentials('admin', 'admin')
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host, port=self.port,
-                                                                            credentials=usr_pwd, socket_timeout=50,
-                                                                            heartbeat=50))
+        self.connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=self.host,
+                port=self.port,
+                credentials=self.credentials,
+                socket_timeout=50,
+                heartbeat=50,
+            )
+        )
 
         return self.connection
 
@@ -28,52 +40,76 @@ class RabbitMQ:
             except:
                 # If the connection fails, wait a short period of time before trying again
                 # time.sleep(0.40)
-                LOG.info('-----Trying to reconnect-----')
+                LOGGER.info("-----Trying to reconnect-----")
         return connection
 
     def connect(self):
         try:
-            usr_pwd = pika.PlainCredentials('guest', 'guest')
-            self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host, port=self.port,
-                                                                                credentials=usr_pwd, socket_timeout=50,
-                                                                                heartbeat=50))
+            self.connection = pika.BlockingConnection(
+                pika.ConnectionParameters(
+                    host=self.host,
+                    port=self.port,
+                    credentials=self.credentials,
+                    socket_timeout=50,
+                    heartbeat=50,
+                )
+            )
 
             self.channel = self.connection.channel()
             self.channel.confirm_delivery()
-            LOG.info('-----RabbitMQ Connected-----')
+            LOGGER.info("-----RabbitMQ Connected-----")
         except:
-            usr_pwd = pika.PlainCredentials('guest', 'guest')
-            self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=self.host, port=self.port,
-                                                                                credentials=usr_pwd, socket_timeout=50,
-                                                                                heartbeat=50))
+            self.connection = pika.BlockingConnection(
+                pika.ConnectionParameters(
+                    host=self.host,
+                    port=self.port,
+                    credentials=self.credentials,
+                    socket_timeout=50,
+                    heartbeat=50,
+                )
+            )
 
             self.channel = self.connection.channel()
             self.channel.confirm_delivery()
-            LOG.info('-----RabbitMQ Connected-----')
+            LOGGER.info("-----RabbitMQ Connected-----")
 
     def publish_to_staff(self, data, user):
-        '''
-            data: str (message that you need to publish)
-            user: list (list of exchanges, on what you want to publish message)
-        '''
+        """
+        data: str (message that you need to publish)
+        user: list (list of exchanges, on what you want to publish message)
+        """
         try:
-            for _user in user:
+            for user in user:
                 try:
                     if self.channel.is_closed:
                         self.connection = self.reconnect()
                         self.channel = self.connection.channel()
                         self.channel.confirm_delivery()
-                        LOG.info('-----RabbitMQ Reconnected-----')
-                    self.channel.exchange_declare(exchange=_user, exchange_type='fanout', durable=True)
-                    self.channel.basic_publish(exchange=_user, routing_key='', body=str(data))
-                    LOG.info(f'-----Message Published From RabbitMQ Successfully-----\n{str(data)}')
+                        LOGGER.info("-----RabbitMQ Reconnected-----")
+                    self.channel.exchange_declare(
+                        exchange=user, exchange_type="fanout", durable=True
+                    )
+                    self.channel.basic_publish(
+                        exchange=user, routing_key="", body=str(data)
+                    )
+                    LOGGER.info(
+                        f"-----Message Published From RabbitMQ Successfully-----\n{str(data)}"
+                    )
                 except:
                     self.connection = self.reconnect()
                     self.channel = self.connection.channel()
                     self.channel.confirm_delivery()
-                    self.channel.exchange_declare(exchange=_user, exchange_type='fanout', durable=True)
-                    self.channel.basic_publish(exchange=_user, routing_key='', body=str(data))
-                    LOG.info(f'-----Message Published From RabbitMQ Successfully-----\n{str(data)}')
+                    self.channel.exchange_declare(
+                        exchange=user, exchange_type="fanout", durable=True
+                    )
+                    self.channel.basic_publish(
+                        exchange=user, routing_key="", body=str(data)
+                    )
+                    LOGGER.info(
+                        f"-----Message Published From RabbitMQ Successfully-----\n{str(data)}"
+                    )
         except Exception as e:
-            logger.error(f"Exception occurred at **** dal / rabbitmq_producer / publish_to_staff **** \n {e}",
-                         exc_info=True)
+            logger.error(
+                f"Exception occurred at **** dal / rabbitmq_producer / publish_to_staff **** \n {e}",
+                exc_info=True,
+            )
